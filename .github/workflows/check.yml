@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: Apache-2.0
+# OpenMyGlass: compile JniInvocation.cpp for the device configuration (HAVE_ANDROID_OS) against
+# pinned AOSP headers, and check that the device fallback runtime is ART. The full AOSP build
+# runs from OpenMyGlass/manifest.
+name: check
+on:
+  push:
+    branches: [glass-4.4]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # android-security/android_system_core aosp-4.4, as pinned in OpenMyGlass/manifest.
+      SYSTEM_CORE_REPO: https://github.com/android-security/android_system_core
+      SYSTEM_CORE_COMMIT: f8b2fe863354f13d12077a29390a8ba991954feb
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Fetch pinned AOSP headers
+        run: |
+          git init -q "$RUNNER_TEMP/system_core"
+          git -C "$RUNNER_TEMP/system_core" fetch -q --depth=1 "$SYSTEM_CORE_REPO" "$SYSTEM_CORE_COMMIT"
+          git -C "$RUNNER_TEMP/system_core" checkout -q FETCH_HEAD
+      - name: Compile JniInvocation.cpp (device and host configurations)
+        run: |
+          for def in -DHAVE_ANDROID_OS=1 -UHAVE_ANDROID_OS; do
+            g++ -std=gnu++11 -fsyntax-only -Wall -Werror "$def" -I include/nativehelper \
+              -I "$RUNNER_TEMP/system_core/include" JniInvocation.cpp
+          done
+      - name: The device fallback is libart.so
+        run: |
+          # Preprocess for the device and read the fallback string that remains.
+          out=$(g++ -std=gnu++11 -E -P -DHAVE_ANDROID_OS=1 -I include/nativehelper \
+            -I "$RUNNER_TEMP/system_core/include" JniInvocation.cpp | grep 'kLibraryFallback =')
+          echo "$out"
+          test "$(echo "$out" | grep -c '"libart.so"')" = 1
+          ! echo "$out" | grep -q libdvm
