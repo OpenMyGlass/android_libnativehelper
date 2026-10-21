@@ -51,7 +51,13 @@ JniInvocation::~JniInvocation() {
 #ifdef HAVE_ANDROID_OS
 static const char* kLibrarySystemProperty = "persist.sys.dalvik.vm.lib";
 #endif
+#ifdef HAVE_ANDROID_OS
+// OpenMyGlass: the device is ART only (no libdvm.so), so the fallback, used when the
+// property is unset or names a library that does not load, is libart.so as well.
+static const char* kLibraryFallback = "libart.so";
+#else
 static const char* kLibraryFallback = "libdvm.so";
+#endif
 
 bool JniInvocation::Init(const char* library) {
 #ifdef HAVE_ANDROID_OS
